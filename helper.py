@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import math
-
+import transformers
 class MHA(nn.Module):
     def __init__(self,features,num_head=8,cross=False,mask=False):
         super(MHA,self).__init__()
@@ -85,14 +85,49 @@ class Encoder(nn.Module):
         super(Encoder,self).__init__()
         self.attention=MHA(features,num_heads)
         self.MLP=MLP(features,mlp_factor)
+        self.tokenizer = transformers.BertTokenizer.from_pretrained('bert-base-uncased')
+        self.model=transformers.BertModel.from_pretrained('bert-base-uncased')
     def forward(self,x):
         x=self.attention(x)
         out=self.MLP(x)
         return out
+    def encode_input(self,x):
+        '''
+        returns the embedding vector and inputs of sequence after appending [CLS] and [SEP] token and the start and end of the sequence.
+        inputs:(dict) containing input_ids,attention_mask,token_type_ids
+        outputs.last_hidden_state: a tensor of shape (batch,n_seq,latent_dim)
+        '''
+        inputs=self.tokenizer(x,return_tensors='pt',padding=True)
+        print(inputs)
+        # input=torch.tensor([token_id])
+        # print(input)
+        with torch.no_grad():
+            outputs=self.model(inputs['input_ids'],inputs['attention_mask'])
+        #encode() maps the words to unique ids ,note that the tokenizer appends [CLS] token in the beginning and [SEP] token at the end        
+        return outputs.last_hidden_state,inputs
     
+    def encode_with_pos(self,x):
+        '''
+        adds positional embeddings to the embeddings returned by encode_input()
+        '''
+        out_encode,token_id=self.encode_input(x)
+        # print(out_encode.shape)
+        pos_encode=torch.zeros(out_encode.shape[1],out_encode.shape[2])
+        # i,j=torch.meshgrid(torch.arange(out_encode.shape[1]),torch.arange(out_encode.shape[2]))
+        j=torch.arange(out_encode.shape[2])
+        # print(torch.arange(out_encode.shape[1]).view(-1,1).shape,torch.arange(start=0,end=out_encode.shape[2],step=2).view(1,-1).shape)
+        pos_encode[:,j%2==0]=torch.sin(torch.arange(out_encode.shape[1]).view(-1,1)/(10000)**(2*torch.arange(start=0,end=out_encode.shape[2],step=2).view(1,-1)/out_encode.shape[0]))
+        pos_encode[:,j%2!=0]=torch.sin(torch.arange(out_encode.shape[1]).view(-1,1)/(10000)**(2*torch.arange(start=1,end=out_encode.shape[2],step=2).view(1,-1)/out_encode.shape[0]))
+        return pos_encode+out_encode,token_id
+    
+
 if __name__=="__main__":
     from torchsummary import summary
-    model=MHA(512,mask=True)
-    input=torch.randn((5,15,512))
-    model(input)
-    summary(model,(15,512),5)
+    # model=MHA(512,mask=True)
+    # input=torch.randn((5,15,512))
+    # model(input)
+    # summary(model,(15,512),5)
+    model=Encoder(512)
+    print(model.encode_with_pos(['Hi, how are you today?','hi'])[0].shape)
+    # print(model.encode_with_pos('Hi, how are you today?')[0].shape,model.encode_with_pos('Hi, how are you today?')[0])
+    
