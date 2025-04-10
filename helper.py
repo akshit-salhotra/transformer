@@ -14,6 +14,8 @@ class MHA(nn.Module):
         self.query=nn.Linear(features,features)
         self.key=nn.Linear(features,features)
         self.value=nn.Linear(features,features)
+        
+        self.project=nn.Linear(features,features)
 
     def forward(self,x,x_encoder=None):
         if self.cross:
@@ -39,12 +41,13 @@ class MHA(nn.Module):
             mask=torch.zeros_like(alignment[0,0,:,:])
             i,j=torch.meshgrid(torch.arange(seq),torch.arange(seq))
             mask[i>j]=1
-            alignment=torch.masked_fill(alignment,mask==1,1e-9)
+            alignment=torch.masked_fill(alignment,mask==1,float('-inf'))
             
         new_x=(nn.functional.softmax(alignment,dim=-1)@v)
         out=torch.permute(new_x,(0,2,1,3)).contiguous().view(batch,seq,-1)
+        out=self.project(out)
         out=out+x
-        out=nn.LayerNorm(x.shape)(out)           
+        out=nn.LayerNorm(x.shape[-1])(out)           
 
         return out
 
@@ -57,14 +60,16 @@ class MLP(nn.Module):
         
         self.mlp1=nn.Linear(features,mlp_factor*features)
         self.mlp2=nn.Linear(mlp_factor*features,features)
+        self.ReLU=nn.ReLU()
         
     def forward(self,x):
         batch,seq,d_model=x.shape
         out_=x.view(-1,d_model)
         out1=self.mlp1(out_)
+        out1=self.ReLU(out1)
         out2=self.mlp2(out1)
         out2=out2.view(batch,seq,d_model)
-        final_out=nn.LayerNorm(x.shape)(out2+x)
+        final_out=nn.LayerNorm(d_model)(out2+x)
         return final_out
     
 class Decoder(nn.Module):
