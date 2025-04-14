@@ -1,12 +1,19 @@
-def get_freq_pairs(seq:list)->dict:
-    freq_pairs={}
+import regex as re
+import pandas as pd
+from typing import Union
+from tqdm import tqdm
+
+def get_freq_pairs(seq:list,freq_pairs={})->dict:
     for p1,p2 in zip(seq[:-1],seq[1:]):
         freq_pairs[(p1,p2)]=freq_pairs.get((p1,p2),0)+1
     
     return freq_pairs
 
-def merge(seq:list,pair:tuple,idx:int)->list:
+def merge(seq:Union[list,str],pair:tuple,idx:int)->list:
     new_seq=[]
+    if isinstance(seq,str):
+        seq=list(seq.encode('utf-8'))
+        
     # for i in range(len(seq)-1):
     i=0
     if len(seq)==1:
@@ -78,10 +85,33 @@ def decode(seq:list,merges:dict)->list:
         
     return bytes(seq).decode('utf-8',errors='replace')
         
-     
-            
+def get_stat_with_forced_splits(seq:str,r:re.compile,freq_stats:dict)->dict:
+    
+    seqs=[list(s.encode('utf-8')) for s in re.findall(r,seq)]
+    for s in seqs:
+        freq_stats=get_freq_pairs(s,freq_stats)
+    
+    return freq_stats
         
     
+def bpe_df_corpus(df:pd.Series,keys:list,r:re.compile,num_merges:int,start_idx:int):
+    merges={}
+    for i in tqdm(range(num_merges)):
+        freq_stats={}
+        for row in df:
+            for key in keys:
+                s=encode(row[key],merges)
+                freq_stats=get_stat_with_forced_splits(s,r,freq_stats)
+        pair=max(freq_stats,key=freq_stats.get)
+        print(f'merged {pair} to create idx :{start_idx}')
+        merges[pair]=start_idx
+        start_idx+=1
+        
+    return merges
+
+            
+    
+            
         
         
     
@@ -291,3 +321,4 @@ merges=bpe(text,30)
 print(decode(encode(text5,merges),merges))
 # print(bpe(integers,20))
 print(text4==decode(encode(text4,merges),merges))
+gpt2pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}{1,4}| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""",re.IGNORECASE)
