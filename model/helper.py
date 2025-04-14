@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import math
 import transformers
+
 class MHA(nn.Module):
     def __init__(self,features,num_head=8,cross=False,mask=False):
         super(MHA,self).__init__()
@@ -52,6 +53,7 @@ class MHA(nn.Module):
         return out
 
 class MLP(nn.Module):
+    
     def __init__(self,features,mlp_factor=4):
         super(MLP,self).__init__()
         
